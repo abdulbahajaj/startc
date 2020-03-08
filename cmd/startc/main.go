@@ -4,21 +4,25 @@ import (
     // "fmt"
     // "log"
     "github.com/abdulbahajaj/startc/pkg/namespaces"
+    // "github.com/moby/moby/pkg/reexec"
+    // "os/exec"
+    // "path/filepath"
+    // "os"
+    // "fmt"
 )
+
 
 func main() {
     desc := namespaces.Desc{
-        Mount: true,
+        Mount: false,
         Uts: false,
         Ipc: false,
         Network: false,
         Pid: true,
         Cgroup: false,
-        User: false,
-        Fork: true,
+        User: true,
         MountProc: true,
-        Cmd: "bash",
+        Cmd: "/bin/sh",
     }
-
     namespaces.Create(desc)
 }

@@ -1,2 +1,4 @@
 github.com/abdulbahajaj/brutus v0.0.0-20191228003221-b541d912212d h1:DPBFv4qo0ZZGcgrK5DUMKZZGUHOylFWfRRAPndh6iVM=
 github.com/abdulbahajaj/brutus v0.0.0-20191228003221-b541d912212d/go.mod h1:PLnc9VioxvY7JA3TqQLG5itmf/Oi6kQCZIwVE0PeqA8=
+github.com/moby/moby v1.13.1 h1:mC5WwQwCXt/dYxZ1cIrRsnJAWw7VdtcTZUIGr4tXzOM=
+github.com/moby/moby v1.13.1/go.mod h1:fDXVQ6+S340veQPv35CzDahGBmHsiclFwfEygB/TWMc=

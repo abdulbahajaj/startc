@@ -9,6 +9,5 @@ rsp:
 	GOOS=linux GOARCH=arm64 make build
 
 .PHONY: run
-run: rsp
-	rsync bin/startc rsproot:~/bin/
-	ssh rsproot "~/bin/startc"
+run: build
+	bin/startc

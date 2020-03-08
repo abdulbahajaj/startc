@@ -1,13 +1,12 @@
 package namespaces
 
 import (
-	"fmt"
 	"os"
 	"log"
 	"os/exec"
 	"syscall"
+	"github.com/moby/moby/pkg/reexec"
 )
-
 
 type Desc struct {
 	// What namespaces to create
@@ -20,51 +19,97 @@ type Desc struct {
 	User bool
 
 	// Other namespace settings
-	Persistent string    // Path to where to save dirs.
-	Fork bool            // Whether or not to fork the proccess before exec.
+	Persistent string    // Path to where to save dirs
 	MountProc bool       // Whether or not to mount the proc filesystem
 	Cmd string           // The command to run in the new namespace
 }
 
+func orIf(cond bool, flag uintptr, condFlag uintptr) uintptr{
+	if cond {
+		flag |= condFlag
+	}
+	return flag
+}
+
+func getFlags(ns Desc) uintptr {
+	var flags uintptr = 0x1
+	// flags |= syscall.CLONE_FILES
+	// flags |= syscall.CLONE_FS
+	// flags |= syscall.CLONE_NEWCGROUP
+
+	flags = orIf(ns.Ipc, flags, syscall.CLONE_NEWIPC)
+	flags = orIf(ns.Network, flags, syscall.CLONE_NEWNET)
+	flags = orIf(ns.Mount, flags, syscall.CLONE_NEWNS)
+	flags = orIf(ns.Pid, flags, syscall.CLONE_NEWPID)
+	flags = orIf(ns.User, flags, syscall.CLONE_NEWUSER)
+	flags = orIf(ns.Uts, flags, syscall.CLONE_NEWUTS)
+	return flags
+}
+
+func getUserMappings() []syscall.SysProcIDMap{
+	return []syscall.SysProcIDMap{
+		{
+			ContainerID: 0,
+			HostID: os.Getuid(),
+			Size: 1,
+		},
+	}
+}
+
+func getGroupMappings() []syscall.SysProcIDMap{
+	return []syscall.SysProcIDMap{
+		{
+			ContainerID: 0,
+			HostID: os.Getgid(),
+			Size: 1,
+		},
+	}
+}
+
 func Create(ns Desc){
-	log.Printf("Creating a new namespace %+v\n", ns)
 
-	// cmd := make([]string, 0)
-	// out, err := exec.Command("unshare", cmd...).Output()
-	// if err != nil {
-	// 	log.Fatal(err)
-	// }
-
-	cmd := exec.Command("/bin/sh")
+	cmd := reexec.Command("nsInit")
+	// cmd := exec.Command(ns.Cmd)
+	
 	cmd.Stdin = os.Stdin
 	cmd.Stdout = os.Stdout
 	cmd.Stderr = os.Stderr
 
 	cmd.SysProcAttr = &syscall.SysProcAttr{
-		Cloneflags: syscall.CLONE_NEWPID,
+		Cloneflags: getFlags(ns),
+		UidMappings: getUserMappings(),
+		GidMappings: getGroupMappings(),
 	}
+
+	log.Printf("Creating a new namespace %+v\n", ns)
 
 	if err := cmd.Run(); err != nil {
-		fmt.Println(err)
+		log.Fatal(err)
 	}
 
-	// log.Println(unshareFlags)
-
-	// err1 := syscall.Unshare(unshareFlags)
-
-	// if err1 != nil {
-	// 	log.Fatal(err1)
-	// }
-
-	// log.Println(out)
+	log.Println("Exited container")
 }
 
-	// unshareFlags := syscall.CLONE_FILES
-	// unshareFlags |=	syscall.CLONE_FS
-	// unshareFlags |=	syscall.CLONE_NEWCGROUP
-	// unshareFlags |=	syscall.CLONE_NEWIPC
-	// unshareFlags |=	syscall.CLONE_NEWNET
-	// unshareFlags |=	syscall.CLONE_NEWNS
-	// unshareFlags |=	syscall.CLONE_NEWPID
-	// unshareFlags |=	syscall.CLONE_NEWUSER
-	// unshareFlags |=	syscall.CLONE_NEWUTS
+func init() {
+	reexec.Register("nsInit", nsInit)
+	if reexec.Init() {
+		os.Exit(0)
+	}
+}
+
+func nsInit() {
+	log.Println("Initializing namespaces")
+	run()
+}
+
+func run(){
+	log.Println("Starting to run container")
+	cmd := exec.Command("/bin/bash")
+	cmd.Stdin = os.Stdin
+	cmd.Stdout = os.Stdout
+	cmd.Stderr = os.Stderr
+	if err := cmd.Run(); err != nil {
+		log.Printf("Error running the /bin/sh command - %s\n", err)
+		os.Exit(1)
+	}
+}

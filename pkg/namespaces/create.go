@@ -3,8 +3,8 @@ package namespaces
 import (
 	"os"
 	"log"
-	"os/exec"
 	"syscall"
+
 	"github.com/moby/moby/pkg/reexec"
 )
 
@@ -33,10 +33,6 @@ func orIf(cond bool, flag uintptr, condFlag uintptr) uintptr{
 
 func getFlags(ns Desc) uintptr {
 	var flags uintptr = 0x1
-	// flags |= syscall.CLONE_FILES
-	// flags |= syscall.CLONE_FS
-	// flags |= syscall.CLONE_NEWCGROUP
-
 	flags = orIf(ns.Ipc, flags, syscall.CLONE_NEWIPC)
 	flags = orIf(ns.Network, flags, syscall.CLONE_NEWNET)
 	flags = orIf(ns.Mount, flags, syscall.CLONE_NEWNS)
@@ -46,22 +42,12 @@ func getFlags(ns Desc) uintptr {
 	return flags
 }
 
-func getUserMappings() []syscall.SysProcIDMap{
+func getMapping(containerID int, hostID int, size int)[]syscall.SysProcIDMap{
 	return []syscall.SysProcIDMap{
 		{
-			ContainerID: 0,
-			HostID: os.Getuid(),
-			Size: 1,
-		},
-	}
-}
-
-func getGroupMappings() []syscall.SysProcIDMap{
-	return []syscall.SysProcIDMap{
-		{
-			ContainerID: 0,
-			HostID: os.Getgid(),
-			Size: 1,
+			ContainerID: containerID,
+			HostID: hostID,
+			Size: size,
 		},
 	}
 }
@@ -69,16 +55,15 @@ func getGroupMappings() []syscall.SysProcIDMap{
 func Create(ns Desc){
 
 	cmd := reexec.Command("nsInit")
-	// cmd := exec.Command(ns.Cmd)
-	
+
 	cmd.Stdin = os.Stdin
 	cmd.Stdout = os.Stdout
 	cmd.Stderr = os.Stderr
 
 	cmd.SysProcAttr = &syscall.SysProcAttr{
 		Cloneflags: getFlags(ns),
-		UidMappings: getUserMappings(),
-		GidMappings: getGroupMappings(),
+		UidMappings: getMapping(0, os.Getuid(), 1),
+		GidMappings: getMapping(0, os.Getgid(), 1),
 	}
 
 	log.Printf("Creating a new namespace %+v\n", ns)
@@ -94,22 +79,5 @@ func init() {
 	reexec.Register("nsInit", nsInit)
 	if reexec.Init() {
 		os.Exit(0)
-	}
-}
-
-func nsInit() {
-	log.Println("Initializing namespaces")
-	run()
-}
-
-func run(){
-	log.Println("Starting to run container")
-	cmd := exec.Command("/bin/bash")
-	cmd.Stdin = os.Stdin
-	cmd.Stdout = os.Stdout
-	cmd.Stderr = os.Stderr
-	if err := cmd.Run(); err != nil {
-		log.Printf("Error running the /bin/sh command - %s\n", err)
-		os.Exit(1)
 	}
 }

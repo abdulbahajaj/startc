@@ -14,13 +14,13 @@ import (
 
 func main() {
     desc := namespaces.Desc{
-        Mount: false,
+        Mount: true,
+        User: true,
+        Pid: true,
         Uts: false,
         Ipc: false,
-        Network: false,
-        Pid: true,
+        Network: true,
         Cgroup: false,
-        User: true,
         MountProc: true,
         Cmd: "/bin/sh",
     }

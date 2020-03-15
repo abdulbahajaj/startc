@@ -1,14 +1,7 @@
 package main
 
 import (
-    // "fmt"
-    // "log"
     "github.com/abdulbahajaj/startc/pkg/namespaces"
-    // "github.com/moby/moby/pkg/reexec"
-    // "os/exec"
-    // "path/filepath"
-    // "os"
-    // "fmt"
 )
 
 

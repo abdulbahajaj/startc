@@ -5,6 +5,9 @@ import (
 	"log"
 	"syscall"
 
+	"os/exec"
+	"fmt"
+
 	"github.com/moby/moby/pkg/reexec"
 )
 
@@ -64,12 +67,29 @@ func Create(ns Desc){
 		Cloneflags: getFlags(ns),
 		UidMappings: getMapping(0, os.Getuid(), 1),
 		GidMappings: getMapping(0, os.Getgid(), 1),
+
 	}
 
 	log.Printf("Creating a new namespace %+v\n", ns)
 
-	if err := cmd.Run(); err != nil {
+	if err := cmd.Start(); err != nil {
 		log.Fatal(err)
+	}
+
+	pid := fmt.Sprintf("%d", cmd.Process.Pid)
+	netinitCmd := exec.Command("bin/netinit", "-pid", pid)
+
+	netinitCmd.Stdin = os.Stdin
+	netinitCmd.Stdout = os.Stdout
+	netinitCmd.Stderr = os.Stderr
+
+	if err := netinitCmd.Run(); err != nil {
+		log.Panic(err)
+	}
+
+	if err := cmd.Wait(); err != nil {
+		log.Println(err)
+		os.Exit(1)
 	}
 
 	log.Println("Exited container")
@@ -81,3 +101,4 @@ func init() {
 		os.Exit(0)
 	}
 }
+

@@ -1,20 +1,11 @@
 package networking
 
 import (
-	"fmt"
-	// "net"
-	"strconv"
-	"time"
-	"math/rand"
 	"runtime"
 	"github.com/vishvananda/netlink"
 	"github.com/vishvananda/netns"
 )
 
-func makeInterfaceName() string{
-	rand.Seed(time.Now().UTC().UnixNano())
-	return fmt.Sprintf("startc-%s", strconv.Itoa(rand.Int())[:8])
-}
 
 func CreateVethPair() (netlink.Link, netlink.Link, error) {
 

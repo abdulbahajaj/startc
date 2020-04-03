@@ -3,8 +3,8 @@ bin/startc: cmd/startc/main.go pkg/namespaces/* pkg/networking/*
 
 bin/netinit: cmd/netinit/main.go pkg/networking/*
 	go build -o bin/netinit cmd/netinit/main.go
-	chown root bin/netinit
-	chmod u+s bin/netinit
+	sudo chown root bin/netinit
+	sudo chmod u+s bin/netinit
 
 .PHONY: build
 build: bin/*

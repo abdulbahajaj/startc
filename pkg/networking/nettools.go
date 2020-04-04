@@ -7,45 +7,61 @@ import (
 	"strconv"
 	"math/rand"
 	"runtime"
+	"errors"
+	"os/exec"
 
 	"github.com/vishvananda/netns"
 	"github.com/vishvananda/netlink"
 )
+
+type Bridge struct {
+	Name string
+	Link netlink.Link
+	IP net.IP
+	Mask net.IPMask
+}
+
+type Container struct {
+	PID int
+	IP net.IP
+	InVeth netlink.Link
+	OutVeth netlink.Link
+	Bridge Bridge
+}
 
 func makeInterfaceName(label string) string{
 	rand.Seed(time.Now().UTC().UnixNano())
 	return fmt.Sprintf("sc-%s%s", label, strconv.Itoa(rand.Int())[:6])
 }
 
-func GetDefaultBridge() (netlink.Link, error) {
-	name := "sc-br0"
-	if bridge, err := netlink.LinkByName(name); err == nil {
-		return bridge, err
-	}
-
-	ip := net.IPv4(172, 0, 0, 1)
-	mask := net.IPv4Mask(255, 255, 0, 0)
-	return CreateBridge(name, ip, mask)
-}
-
-func CreateBridge(name string, ip net.IP, mask net.IPMask) (netlink.Link, error) {
+func CreateBridge(name string, ip net.IP, mask net.IPMask) (Bridge, error) {
 	linkAttrs := netlink.LinkAttrs{Name: name}
-	bridge := netlink.Bridge{LinkAttrs: linkAttrs}
+	netBridge := netlink.Bridge{LinkAttrs: linkAttrs}
 
-	if err := netlink.LinkAdd(&bridge); err != nil {
-		return nil, err
+	if err := netlink.LinkAdd(&netBridge); err != nil {
+		return Bridge{}, err
 	}
 
 	address := &netlink.Addr{IPNet: &net.IPNet{IP: ip, Mask: mask}}
-	if err := netlink.AddrAdd(&bridge, address); err != nil {
-		return nil, err
+	if err := netlink.AddrAdd(&netBridge, address); err != nil {
+		return Bridge{}, err
 	}
 
-	if err := netlink.LinkSetUp(&bridge); err != nil {
-		return nil, err
+	if err := netlink.LinkSetUp(&netBridge); err != nil {
+		return Bridge{}, err
 	}
 
-	return netlink.LinkByName(name)
+	link, err := netlink.LinkByName(name)
+	if err != nil {
+		return Bridge{}, err
+	}
+
+	return Bridge{
+		Name: name,
+		Link: link,
+		IP: ip,
+		Mask: mask,
+	}, nil
 }
 
 func CreateVeth() (netlink.Link, netlink.Link, error){
@@ -86,38 +102,6 @@ func AttachVethToBridge(veth  netlink.Link, bridge netlink.Link) error {
 	return netlink.LinkSetMaster(veth, bridge)
 }
 
-func MoveVethToContainer(veth netlink.Link, pid int) error {
-	if err := netlink.LinkSetNsPid(veth, pid); err != nil {
-		return err
-	}
-
-	// runtime.LockOSThread()
-	// defer runtime.UnlockOSThread()
-
-	// currentNs, err := netns.Get()
-	// if err != nil {
-		// return err
-	// }
-	// defer currentNs.Close()
-	// defer netns.Set(currentNs)
-
-	// nnsHandler, err := netns.GetFromPid(pid)
-	// if err != nil {
-		// return err
-	// }
-	// defer nnsHandler.Close()
-
-	// if err := netns.Set(nnsHandler); err != nil {
-		// return err
-	// }
-	//
-	// if err := netlink.LinkSetUp(veth); err != nil {
-		// return err
-	// }
-
-	return nil
-}
-
 func ExecInNS(pid int, fn func() error ) error {
 	runtime.LockOSThread()
 	defer runtime.UnlockOSThread()
@@ -143,43 +127,140 @@ func ExecInNS(pid int, fn func() error ) error {
 	return fn()
 }
 
-func ContainerSetup(pid int, ip net.IP, mask net.IPMask, veth netlink.Link) error {
-	netlink.LinkSetNsPid(veth, pid)
-
-	if err := ExecInNS(pid, func() error {
-		addr := &netlink.Addr{IPNet: &net.IPNet{IP: ip, Mask: mask}}
-		if err := netlink.AddrAdd(veth, addr); err != nil {
-			return err
+func AddDefaultRoute(ip net.IP, dev netlink.Link) error {
+		route := &netlink.Route{
+			Scope:     netlink.SCOPE_UNIVERSE,
+			LinkIndex: dev.Attrs().Index,
+			Gw:        ip,
 		}
 
-		if err := netlink.LinkSetUp(veth); err != nil {
-			return err
-		}
-
-
-
-		return nil
-	}); err != nil {
-		return err
-	}
-
-	return nil
+		return netlink.RouteAdd(route)
 }
 
+func CalculateContainerIP(cid int) (net.IP, error) {
+	c, d := 0, cid + 1
 
+	for d > 255 {
+		d = d - 255
+		c += 1
+	}
 
-// func SetRoute(ip net.IP, mask net.IPMask, gateway net.IP, dev netlink.Link) error {
+	if c > 255 {
+		return nil, errors.New("Exceeded maximum allowed IP range")
+	}
 
+	return net.IPv4(172, 0, byte(c), byte(d)), nil
+}
+
+func ContainerSetup(pid int, cid int, bridge Bridge) (Container, error) {
+	veth1, veth2, err := CreateVeth()
+	AttachVethToBridge(veth1, bridge.Link)
+	netlink.LinkSetNsPid(veth2, pid)
+	containerIP, err := CalculateContainerIP(cid)
+
+	if err != nil {
+		return Container{}, err
+	}
+
+	if err := ExecInNS(pid, func() error {
+		addr := &netlink.Addr{IPNet: &net.IPNet{IP: containerIP, Mask: bridge.Mask}}
+		if err := netlink.AddrAdd(veth2, addr); err != nil {
+			return err
+		}
+
+		if err := netlink.LinkSetUp(veth2); err != nil {
+			return err
+		}
+
+		return AddDefaultRoute(bridge.IP, veth2)
+	}); err != nil {
+		return Container{}, err
+	}
+
+	return Container{
+		PID: pid,
+		IP: containerIP,
+		InVeth: veth2,
+		OutVeth: veth1,
+		Bridge: bridge,
+	}, nil
+}
+
+func GetCIDR(ip net.IP, mask net.IPMask) string {
+	binary := strconv.FormatInt(int64(mask[0]), 2)
+	binary += strconv.FormatInt(int64(mask[1]), 2)
+	binary += strconv.FormatInt(int64(mask[2]), 2)
+	binary += strconv.FormatInt(int64(mask[3]), 2)
+
+	count := 0
+	for cur := 0; cur < len(binary); cur++ {
+		if binary[cur] == '1' {
+			count += 1
+		}
+	}
+
+	return ip.String() + "/" + strconv.Itoa(count)
+}
+
+func EnableIPForward() error {
+	return exec.Command("sysctl", "net.ipv4.ip_forward=1").Run()
+}
+
+// func GetDefaultGateway() err {
+// 	routeOut, err := netlink.RouteGet(net.IPv4(1,1,1,1))
+// 	if err != nil {
+// 		return err
+// 	}
+// 	if len(routeOut) == 0 {
+// 		return errors.New("No route out was found")
+// 	}
+
+// 	ifindex := routeOut[0].LinkIndex
+
+// 	links, err :=  netlink.LinkList()
+// 	if err != nil {
+// 		return err
+// 	}
+
+// 	if len(links) < ifindex {
+// 		return errors.New("Was not able to retrieve desired link")
+// 	}
+
+// 	links[ifindex - 1].Attrs().Name
 // }
 
-// func AddAddr(ip net.IP, mask net.IPMask, dev netlink.Link) error {
+func Masquerade(bridge Bridge) error {
+	return exec.Command("iptables",
+			"-t", "nat",
+			"-A", "POSTROUTING",
+			"-s", GetCIDR(bridge.IP, bridge.Mask),
+			"-j", "MASQUERADE").Run()
+}
 
-// }
+func EnvSetup() (Bridge, error) {
+	name := "sc-br0"
+	mask := net.IPv4Mask(255, 255, 0, 0)
+	bridgeIP := net.IPv4(172, 0, 0, 1)
 
-// func EnablePortForwarding() error {
+	if link, err := netlink.LinkByName(name); err == nil {
+		return Bridge{
+			Name: name,
+			Link: link,
+			Mask: mask,
+			IP: bridgeIP,
+		}, err
+	}
 
-// }
+	bridge, err := CreateBridge(name, bridgeIP, mask)
+	if err != nil {
+		return Bridge{}, err
+	}
+	if err := EnableIPForward(); err != nil {
+		return Bridge{}, err
+	}
+	if err := Masquerade(bridge); err != nil {
+		return Bridge{}, err
+	}
 
-// func Masquerade(source net.IP, output netlink.Link){
-
-// }
+	return bridge, nil
+}

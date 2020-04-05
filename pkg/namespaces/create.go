@@ -4,7 +4,6 @@ import (
 	"os"
 	"log"
 	"syscall"
-
 	"os/exec"
 	"fmt"
 
@@ -25,6 +24,7 @@ type Desc struct {
 	Persistent string    // Path to where to save dirs
 	MountProc bool       // Whether or not to mount the proc filesystem
 	Cmd string           // The command to run in the new namespace
+	MountPath string           // The command to run in the new namespace
 }
 
 func orIf(cond bool, flag uintptr, condFlag uintptr) uintptr{
@@ -57,7 +57,11 @@ func getMapping(containerID int, hostID int, size int)[]syscall.SysProcIDMap{
 
 func Create(ns Desc){
 
-	cmd := reexec.Command("nsInit")
+	if ns.MountPath == "" {
+		log.Fatal("Provide a valid mount path")
+	}
+
+	cmd := reexec.Command("nsInit", "--cmd", ns.Cmd, "--mount", ns.MountPath)
 
 	cmd.Stdin = os.Stdin
 	cmd.Stdout = os.Stdout
@@ -67,18 +71,16 @@ func Create(ns Desc){
 		Cloneflags: getFlags(ns),
 		UidMappings: getMapping(0, os.Getuid(), 1),
 		GidMappings: getMapping(0, os.Getgid(), 1),
-
 	}
-
-	log.Printf("Creating a new namespace %+v\n", ns)
 
 	if err := cmd.Start(); err != nil {
 		log.Fatal(err)
 	}
 
+	log.Printf("Created namespace %+v\n", ns)
+
 	pid := fmt.Sprintf("%d", cmd.Process.Pid)
 	netinitCmd := exec.Command("bin/netinit", "-pid", pid)
-
 	netinitCmd.Stdin = os.Stdin
 	netinitCmd.Stdout = os.Stdout
 	netinitCmd.Stderr = os.Stderr
@@ -86,6 +88,8 @@ func Create(ns Desc){
 	if err := netinitCmd.Run(); err != nil {
 		log.Panic(err)
 	}
+
+	cmd.Process.Signal(syscall.SIGIO)
 
 	if err := cmd.Wait(); err != nil {
 		log.Println(err)

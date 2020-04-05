@@ -10,12 +10,15 @@ func main() {
         Mount: true,
         User: true,
         Pid: true,
-        Uts: false,
+        Uts: true,
         Ipc: false,
         Network: true,
         Cgroup: false,
         MountProc: true,
         Cmd: "/bin/sh",
+        MountPath: "/home/ubuntu/projects/mount-points/newroot",
     }
+
+
     namespaces.Create(desc)
 }

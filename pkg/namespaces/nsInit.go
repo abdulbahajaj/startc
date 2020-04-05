@@ -3,21 +3,21 @@ package namespaces
 import (
 	"log"
 	"os/exec"
+	"os/signal"
 	"os"
 	"syscall"
 	"path/filepath"
+	"flag"
 )
 
-func run(){
-	log.Println("Running container")
-	cmd := exec.Command("/bin/sh")
-	cmd.Stdin = os.Stdin
-	cmd.Stdout = os.Stdout
-	cmd.Stderr = os.Stderr
-	if err := cmd.Run(); err != nil {
-		log.Printf("Error running the /bin/sh command - %s\n", err)
-		os.Exit(1)
-	}
+func setProc(path string) error {
+	os.MkdirAll("/proc", 0755)
+	source := "proc"
+	target := filepath.Join(path, "/proc")
+	fstype := "proc"
+	flags := 0
+	data := ""
+	return syscall.Mount(source, target, fstype, uintptr(flags), data)
 }
 
 func setRoot(path string) error {
@@ -48,30 +48,52 @@ func setRoot(path string) error {
 	return nil;
 }
 
-func setProc(path string) error {
-	os.MkdirAll("/proc", 0755)
-	source := "proc"
-	target := filepath.Join(path, "/proc")
-	fstype := "proc"
-	flags := 0
-	data := ""
-	return syscall.Mount(source, target, fstype, uintptr(flags), data)
+func run(cmd string) error {
+	log.Println("Running container")
+	process := exec.Command("/bin/sh")
+	process.Stdin = os.Stdin
+	process.Stdout = os.Stdout
+	process.Stderr = os.Stderr
+	return process.Run()
+}
+
+func WaitUntilSetup() {
+	sigs := make(chan os.Signal, 1)
+	signal.Notify(sigs, syscall.SIGIO)
+	<-sigs
 }
 
 /*
 * Entrypoint to the namespace
 */
 func nsInit() {
-	log.Println("Initializing namespaces")
-	// root := "/root/projects/mount-points/newroot"
-	root := "/home/ubuntu/projects/mount-points/newroot"
-	if err := setProc(root); err != nil {
-		log.Panic(err)
+	var cmd string
+	var mountPath string
+
+	flag.StringVar(&cmd, "cmd", "/bin/sh", "Enter the command that you want to run inside the container")
+	flag.StringVar(&mountPath, "mount", "", "Enter the command that you want to run inside the container")
+	flag.Parse()
+
+	if mountPath == "" {
+		log.Panic("You should provide a mount path")
 	}
-	//
-	if err := setRoot(root); err != nil {
+
+
+	log.Println("Initializing namespaces")
+	if err := setProc(mountPath); err != nil {
 		log.Panic(err)
 	}
 
-	run()
+	if err := setRoot(mountPath); err != nil {
+		log.Panic(err)
+	}
+	if err := syscall.Sethostname([]byte("startc")); err != nil {
+		log.Panic(err)
+	}
+
+	WaitUntilSetup()
+
+	if err := run(cmd); err != nil {
+		log.Panic(err)
+	}
 }

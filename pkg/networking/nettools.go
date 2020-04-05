@@ -172,7 +172,11 @@ func ContainerSetup(pid int, cid int, bridge Bridge) (Container, error) {
 			return err
 		}
 
-		return AddDefaultRoute(bridge.IP, veth2)
+		if err := AddDefaultRoute(bridge.IP, veth2); err != nil {
+			return err
+		}
+
+		return nil
 	}); err != nil {
 		return Container{}, err
 	}

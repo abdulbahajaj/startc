@@ -10,9 +10,19 @@ import (
 	"flag"
 )
 
+func setSysfs(path string) error {
+	os.MkdirAll("/sys", 0755)
+	source := ""
+	target := filepath.Join(path, "/sys")
+	fstype := "sysfs"
+	flags := 0
+	data := ""
+	return syscall.Mount(source, target, fstype, uintptr(flags), data)
+}
+
 func setProc(path string) error {
 	os.MkdirAll("/proc", 0755)
-	source := "proc"
+	source := ""
 	target := filepath.Join(path, "/proc")
 	fstype := "proc"
 	flags := 0
@@ -84,12 +94,17 @@ func nsInit() {
 		log.Panic(err)
 	}
 
+	if err := setSysfs(mountPath); err != nil {
+		log.Panic(err)
+	}
+
 	if err := setRoot(mountPath); err != nil {
 		log.Panic(err)
 	}
 	if err := syscall.Sethostname([]byte("startc")); err != nil {
 		log.Panic(err)
 	}
+
 
 	WaitUntilSetup()
 

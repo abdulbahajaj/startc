@@ -8,6 +8,8 @@ import (
 	"fmt"
 
 	"github.com/moby/moby/pkg/reexec"
+
+	// "github.com/abdulbahajaj/startc/pkg/cgroup"
 )
 
 type Desc struct {
@@ -19,6 +21,9 @@ type Desc struct {
 	Pid bool
 	Cgroup bool
 	User bool
+
+	CPUShare int
+	MemoryLimit int
 
 	// Other namespace settings
 	Persistent string    // Path to where to save dirs
@@ -80,7 +85,7 @@ func Create(ns Desc){
 	log.Printf("Created namespace %+v\n", ns)
 
 	pid := fmt.Sprintf("%d", cmd.Process.Pid)
-	netinitCmd := exec.Command("bin/netinit", "-pid", pid)
+	netinitCmd := exec.Command("bin/pinit", "-pid", pid)
 	netinitCmd.Stdin = os.Stdin
 	netinitCmd.Stdout = os.Stdout
 	netinitCmd.Stderr = os.Stderr
@@ -88,6 +93,7 @@ func Create(ns Desc){
 	if err := netinitCmd.Run(); err != nil {
 		log.Panic(err)
 	}
+
 
 	cmd.Process.Signal(syscall.SIGIO)
 
@@ -105,4 +111,3 @@ func init() {
 		os.Exit(0)
 	}
 }
-

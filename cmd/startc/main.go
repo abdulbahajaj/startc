@@ -14,8 +14,10 @@ func main() {
         Pid: true,
         Uts: true,
         Network: true,
-
         MountProc: true,
+
+        CPUShare: 100,
+        MemoryLimit: 2000,
 
         Cmd: "/bin/sh",
         MountPath: "/home/ubuntu/projects/mount-points/newroot",

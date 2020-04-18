@@ -5,11 +5,13 @@ import (
 	"flag"
 
 	"github.com/abdulbahajaj/startc/pkg/networking"
+	"github.com/abdulbahajaj/startc/pkg/cgroup"
 )
 
 func main(){
 	var pid int
 	flag.IntVar(&pid, "pid", 0, "pid of a process in the container's network namespace")
+
 	flag.Parse()
 
 	if pid == 0 {
@@ -29,4 +31,17 @@ func main(){
 	}
 
 	log.Println(cont)
+
+	// if (ns.Cgroup){
+	cgDesc := cgroup.Desc{
+		PID: pid,
+		CPUShare: 1010,
+		MemoryLimit: 101000000,
+	}
+	if err := cgroup.Apply(cgDesc); err != nil {
+		log.Panic(err)
+	}
+
+// }
+
 }

@@ -76,6 +76,7 @@ func WaitUntilSetup() {
 /*
 * Entrypoint to the namespace
 */
+
 func nsInit() {
 	var cmd string
 	var mountPath string

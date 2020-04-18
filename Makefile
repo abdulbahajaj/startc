@@ -1,10 +1,10 @@
-bin/startc: cmd/startc/main.go pkg/namespaces/* pkg/networking/*
+bin/startc: cmd/startc/main.go pkg/namespaces/* pkg/networking/* pkg/cgroup/*
 	go build -o bin/startc cmd/startc/main.go
 
-bin/netinit: cmd/netinit/main.go pkg/networking/*
-	go build -o bin/netinit cmd/netinit/main.go
-	sudo chown root bin/netinit
-	sudo chmod u+s bin/netinit
+bin/pinit: cmd/privilagedInit/main.go pkg/networking/* pkg/cgroup/*
+	go build -o bin/pinit cmd/privilagedInit/main.go
+	sudo chown root bin/pinit
+	sudo chmod u+s bin/pinit
 
 .PHONY: build
 build: bin/*
@@ -17,6 +17,3 @@ rsp:
 run: build
 	bin/startc
 
-.PHONY: runnet
-runnet: build
-	bin/netinit

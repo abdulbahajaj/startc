@@ -4,8 +4,7 @@ Startc is a container runtime
 
 # Features
 
-1) Namespace isolation
-2) Networking setup: Connects all containers to a Linux bridge. Sets IPTables rules to enable masquarading.
-3) Set appropriate linux capabilities default.
-4) Programs in unprivilaged containers.
-5) Retrieve images from dockerhub.
+1) Supports namespace isolation
+2) Connects newly created containers to a bridged network
+3) Assigns IPs to containers and masquerades outgoing packets
+4) Unprivileged containers
